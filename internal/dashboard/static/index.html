@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoQueue Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+        .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; }
+        .card-glow { box-shadow: 0 0 20px rgba(99, 102, 241, 0.1); }
+        .stat-value { font-variant-numeric: tabular-nums; }
+        .badge { padding: 2px 8px; border-radius: 9999px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
+        .badge-pending { background: #1e3a5f; color: #60a5fa; }
+        .badge-processing { background: #1e3a2f; color: #34d399; }
+        .badge-completed { background: #1e3a3f; color: #2dd4bf; }
+        .badge-failed { background: #3b1f1f; color: #f87171; }
+        .badge-dead { background: #2d1b3d; color: #c084fc; }
+        .badge-retrying { background: #3b2f1f; color: #fbbf24; }
+        .badge-scheduled { background: #1b2d3d; color: #93c5fd; }
+        .bar { transition: width 0.5s ease; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .btn { padding: 4px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+        .btn-retry { background: #1e3a5f; color: #60a5fa; border: 1px solid #2563eb; }
+        .btn-retry:hover { background: #2563eb; color: white; }
+        .btn-delete { background: #3b1f1f; color: #f87171; border: 1px solid #dc2626; }
+        .btn-delete:hover { background: #dc2626; color: white; }
+        .tab { padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; }
+        .tab.active { border-color: #6366f1; color: #a5b4fc; }
+        .tab:hover { color: #a5b4fc; }
+        .connected { color: #34d399; }
+        .disconnected { color: #f87171; }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="max-w-7xl mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-lg">Q</div>
+                <div>
+                    <h1 class="text-xl font-bold text-white">GoQueue</h1>
+                    <p class="text-xs text-gray-400">Job Queue Dashboard</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 text-sm">
+                <span id="connection-dot" class="w-2 h-2 rounded-full bg-red-500"></span>
+                <span id="connection-status" class="text-gray-400">Connecting...</span>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+            <div class="card p-4">
+                <div class="text-xs text-gray-400 mb-1">Processed</div>
+                <div class="text-2xl font-bold stat-value text-white" id="stat-processed">0</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-xs text-gray-400 mb-1">Succeeded</div>
+                <div class="text-2xl font-bold stat-value text-emerald-400" id="stat-succeeded">0</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-xs text-gray-400 mb-1">Failed</div>
+                <div class="text-2xl font-bold stat-value text-red-400" id="stat-failed">0</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-xs text-gray-400 mb-1">Enqueued</div>
+                <div class="text-2xl font-bold stat-value text-blue-400" id="stat-enqueued">0</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-xs text-gray-400 mb-1">Retried</div>
+                <div class="text-2xl font-bold stat-value text-yellow-400" id="stat-retried">0</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-xs text-gray-400 mb-1">Dead</div>
+                <div class="text-2xl font-bold stat-value text-purple-400" id="stat-dead">0</div>
+            </div>
+            <div class="card p-4 card-glow">
+                <div class="text-xs text-gray-400 mb-1">Throughput</div>
+                <div class="text-2xl font-bold stat-value text-indigo-400" id="stat-throughput">0</div>
+                <div class="text-xs text-gray-500">jobs/sec</div>
+            </div>
+        </div>
+
+        <!-- Queue Overview -->
+        <div class="card mb-6">
+            <div class="px-4 py-3 border-b border-gray-700">
+                <h2 class="text-sm font-semibold text-gray-300">Queue Overview</h2>
+            </div>
+            <div class="p-4" id="queue-overview">
+                <p class="text-gray-500 text-sm">Waiting for data...</p>
+            </div>
+        </div>
+
+        <!-- Jobs Table -->
+        <div class="card">
+            <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+                <h2 class="text-sm font-semibold text-gray-300">Recent Jobs</h2>
+                <div class="flex gap-1" id="queue-tabs"></div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs text-gray-500 border-b border-gray-700">
+                            <th class="px-4 py-2">ID</th>
+                            <th class="px-4 py-2">Type</th>
+                            <th class="px-4 py-2">Queue</th>
+                            <th class="px-4 py-2">Status</th>
+                            <th class="px-4 py-2">Attempts</th>
+                            <th class="px-4 py-2">Created</th>
+                            <th class="px-4 py-2">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobs-body">
+                        <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">No jobs yet</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
